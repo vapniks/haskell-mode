@@ -1,4 +1,4 @@
-;;; haskell-decl-scan.el --- Declaration scanning module for Haskell Mode
+;;; haskell-decl-scan.el --- Declaration scanning module for Haskell Mode -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2004, 2005, 2007, 2009  Free Software Foundation, Inc.
 ;; Copyright (C) 1997-1998  Graeme E Moss
@@ -36,9 +36,9 @@
 ;; To turn declaration scanning on for all Haskell buffers under the
 ;; Haskell mode of Moss&Thorn, add this to .emacs:
 ;;
-;;    (add-hook 'haskell-mode-hook 'turn-on-haskell-decl-scan)
+;;    (add-hook 'haskell-mode-hook 'haskell-decl-scan-mode)
 ;;
-;; Otherwise, call `turn-on-haskell-decl-scan'.
+;; Otherwise, call `haskell-decl-scan-mode'.
 ;;
 ;;
 ;; Customisation:
@@ -100,22 +100,25 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'haskell-mode)
 (require 'syntax)
-(with-no-warnings (require 'cl))
 (require 'imenu)
 
+;;;###autoload
 (defgroup haskell-decl-scan nil
   "Haskell declaration scanning (`imenu' support)."
   :link '(custom-manual "(haskell-mode)haskell-decl-scan-mode")
   :group 'haskell
   :prefix "haskell-decl-scan-")
 
+;;;###autoload
 (defcustom haskell-decl-scan-bindings-as-variables nil
   "Whether to put top-level value bindings into a \"Variables\" category."
   :group 'haskell-decl-scan
   :type 'boolean)
 
+;;;###autoload
 (defcustom haskell-decl-scan-add-to-menubar t
   "Whether to add a \"Declarations\" menu entry to menu bar."
   :group 'haskell-decl-scan
@@ -195,7 +198,7 @@ current line that starts with REGEXP and is not in `font-lock-comment-face'."
   "Like haskell-ds-move-to-start-regexp, but uses syntax-ppss to
   skip comments"
   (let (p)
-    (loop
+    (cl-loop
      do (setq p (point))
      (haskell-ds-move-to-start-regexp inc regexp)
      while (and (nth 4 (syntax-ppss))
@@ -258,8 +261,7 @@ then point does not move if already at the start of a declaration."
                      ;; here seems to be the only addition to make this
                      ;; module support LaTeX-style literate scripts.
                      (if (and (looking-at start-decl-re)
-                              (not (eq (get-text-property (point) 'face)
-                                       'font-lock-comment-face)))
+                              (not (elt (syntax-ppss) 4)))
                          (match-beginning 1)))))
         (if (and start
                  ;; This complicated boolean determines whether we
@@ -489,15 +491,24 @@ datatypes) in a Haskell file for the `imenu' package."
                  (name (car name-posns))
                  (posns (cdr name-posns))
                  (start-pos (car posns))
-                 (type (cdr result))
+                 (type (cdr result)))
                  ;; Place `(name . start-pos)' in the correct alist.
-                 (sym (cdr (assq type
-                                 '((variable . index-var-alist)
-                                   (datatype . index-type-alist)
-                                   (class . index-class-alist)
-                                   (import . index-imp-alist)
-                                   (instance . index-inst-alist))))))
-            (set sym (cons (cons name start-pos) (symbol-value sym))))))
+                 (cl-case type
+                   (variable
+                    (setq index-var-alist
+                          (cl-acons name start-pos index-var-alist)))
+                   (datatype
+                    (setq index-type-alist
+                          (cl-acons name start-pos index-type-alist)))
+                   (class
+                    (setq index-class-alist
+                          (cl-acons name start-pos index-class-alist)))
+                   (import
+                    (setq index-imp-alist
+                          (cl-acons name start-pos index-imp-alist)))
+                   (instance
+                    (setq index-inst-alist
+                          (cl-acons name start-pos index-inst-alist)))))))
     ;; Now sort all the lists, label them, and place them in one list.
     (message "Sorting declarations in %s..." bufname)
     (when index-type-alist
@@ -543,6 +554,9 @@ datatypes) in a Haskell file for the `imenu' package."
   "Unconditionally activate `haskell-decl-scan-mode'."
   (interactive)
   (haskell-decl-scan-mode))
+(make-obsolete 'turn-on-haskell-decl-scan
+               'haskell-decl-scan-mode
+               "2015-07-23")
 
 ;;;###autoload
 (define-minor-mode haskell-decl-scan-mode
@@ -601,9 +615,5 @@ Invokes `haskell-decl-scan-mode-hook' on activation."
 ;; Provide ourselves:
 
 (provide 'haskell-decl-scan)
-
-;; Local Variables:
-;; byte-compile-warnings: (not cl-functions)
-;; End:
 
 ;;; haskell-decl-scan.el ends here

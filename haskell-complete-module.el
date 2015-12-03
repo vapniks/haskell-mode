@@ -1,4 +1,4 @@
-;;; haskell-complete-module.el --- A fast way to complete Haskell module names
+;;; haskell-complete-module.el --- A fast way to complete Haskell module names -*- lexical-binding: t -*-
 
 ;; Copyright (c) 2014 Chris Done. All rights reserved.
 
@@ -17,14 +17,16 @@
 
 ;;; Code:
 
-(require 'cl)
+(require 'cl-lib)
 
+;;;###autoload
 (defcustom haskell-complete-module-preferred
   '()
   "Override ordering of module results by specifying preferred modules."
   :group 'haskell
   :type '(repeat string))
 
+;;;###autoload
 (defcustom haskell-complete-module-max-display
   10
   "Maximum items to display in minibuffer."
@@ -33,56 +35,74 @@
 
 (defun haskell-complete-module-read (prompt candidates)
   "Interactively auto-complete from a list of candidates."
-  (let ((continue t)
-        (stack (list))
+  (let ((stack (list))
         (pattern "")
         (result nil))
+    (delete-dups candidates)
     (setq candidates
           (sort candidates
                 (lambda (a b)
-                  (if (and (member a haskell-complete-module-preferred)
-                           (not (member b haskell-complete-module-preferred)))
-                      -1
-                    (string< a b)))))
+                  (let ((a-mem (member a haskell-complete-module-preferred))
+                        (b-mem (member b haskell-complete-module-preferred)))
+                    (cond
+                     ((and a-mem (not b-mem))
+                      t)
+                     ((and b-mem (not a-mem))
+                      nil)
+                     (t
+                      (string< a b)))))))
     (while (not result)
-      (let ((key (read-event (concat (propertize prompt 'face 'minibuffer-prompt)
-                                     (propertize pattern 'face 'font-lock-type-face)
-                                     "{"
-                                     (mapconcat #'identity
-                                                (let* ((i 0))
-                                                  (loop for candidate in candidates
-                                                        while (<= i haskell-complete-module-max-display)
-                                                        do (incf i)
-                                                        collect (cond ((> i haskell-complete-module-max-display)
-                                                                       "...")
-                                                                      ((= i 1)
-                                                                       (propertize candidate 'face 'ido-first-match-face))
-                                                                      (t candidate))))
-                                                " | ")
-                                     "}"))))
-        (case key
-          (backspace
-           (unless (null stack)
-             (setq candidates (pop stack)))
-           (unless (string= "" pattern)
-             (setq pattern (substring pattern 0 -1))))
-          (return (setq result (car candidates)))
-          (left (setq candidates (append (last candidates) (butlast candidates))))
-          (right (setq candidates (append (cdr candidates) (list (car candidates)))))
-          (t (when (characterp key)
-               (let ((char (char-to-string key)))
-                 (when (string-match "[A-Za-z0-9_'.]+" char)
-                   (push candidates stack)
-                   (setq pattern (concat pattern char))
-                   (setq candidates (haskell-complete-module pattern candidates)))))))))
+      (let ((key
+             (key-description
+              (vector
+               (read-key
+                (concat (propertize prompt 'face 'minibuffer-prompt)
+                        (propertize pattern 'face 'font-lock-type-face)
+                        "{"
+                        (mapconcat #'identity
+                                   (let* ((i 0))
+                                     (cl-loop for candidate in candidates
+                                              while (<= i haskell-complete-module-max-display)
+                                              do (cl-incf i)
+                                              collect (cond ((> i haskell-complete-module-max-display)
+                                                             "...")
+                                                            ((= i 1)
+                                                             (propertize candidate 'face 'ido-first-match-face))
+                                                            (t candidate))))
+                                   " | ")
+                        "}"))))))
+        (cond
+         ((string= key "C-g")
+          (keyboard-quit))
+         ((string= key "DEL")
+          (unless (null stack)
+            (setq candidates (pop stack)))
+          (unless (string= "" pattern)
+            (setq pattern (substring pattern 0 -1))))
+         ((string= key "RET")
+          (setq result (or (car candidates)
+                           pattern)))
+         ((string= key "<left>")
+          (setq candidates
+                (append (last candidates)
+                        (butlast candidates))))
+         ((string= key "<right>")
+          (setq candidates
+                (append (cdr candidates)
+                        (list (car candidates)))))
+         (t
+          (when (string-match "[A-Za-z0-9_'.]+" key)
+            (push candidates stack)
+            (setq pattern (concat pattern key))
+            (setq candidates (haskell-complete-module pattern candidates)))))))
     result))
 
 (defun haskell-complete-module (pattern candidates)
   "Filter the CANDIDATES using PATTERN."
   (let ((case-fold-search t))
-    (loop for candidate in candidates
-          when (haskell-complete-module-match pattern candidate)
-          collect candidate)))
+    (cl-loop for candidate in candidates
+             when (haskell-complete-module-match pattern candidate)
+             collect candidate)))
 
 (defun haskell-complete-module-match (pattern text)
   "Match PATTERN against TEXT."

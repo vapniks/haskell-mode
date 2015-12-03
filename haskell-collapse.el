@@ -1,4 +1,4 @@
-;;; haskell-collapse.el --- Collapse expressions
+;;; haskell-collapse.el --- Collapse expressions -*- lexical-binding: t -*-
 
 ;; Copyright (c) 2014 Chris Done. All rights reserved.
 
@@ -29,7 +29,7 @@
   (let ((break nil))
     (while (and (not break)
                 (search-backward-regexp "[[({]" beg t 1))
-      (unless (eq (get-text-property (point) 'face) 'font-lock-string-face)
+      (unless (elt (syntax-ppss) 3)
         (let ((orig (point)))
           (haskell-collapse-sexp)
           (goto-char orig)

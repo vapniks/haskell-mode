@@ -1,4 +1,4 @@
-;;; haskell-sort-imports.el --- Sort the list of Haskell imports at the point alphabetically
+;;; haskell-sort-imports.el --- Sort the list of Haskell imports at the point alphabetically -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2010  Chris Done
 
@@ -30,6 +30,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 (defvar haskell-sort-imports-regexp
   (concat "^import[ ]+"
           "\\(qualified \\)?"
@@ -38,12 +40,12 @@
 
 ;;;###autoload
 (defun haskell-sort-imports ()
-  (interactive)
   "Sort the import list at point. It sorts the current group
 i.e. an import list separated by blank lines on either side.
 
 If the region is active, it will restrict the imports to sort
 within that region."
+  (interactive)
   (when (haskell-sort-imports-at-import)
     (let* ((points (haskell-sort-imports-decl-points))
            (current-string (buffer-substring-no-properties (car points)
@@ -53,18 +55,19 @@ within that region."
           (progn (goto-char (region-beginning))
                  (haskell-sort-imports-goto-import-start))
         (haskell-sort-imports-goto-group-start))
-      (let ((start (point))
-            (imports (haskell-sort-imports-collect-imports)))
-        (delete-region start (point))
-        (mapc (lambda (import)
-                (insert import "\n"))
-              (sort imports (lambda (a b)
-                              (string< (haskell-sort-imports-normalize a)
-                                       (haskell-sort-imports-normalize b)))))
-        (goto-char start)
-        (when (search-forward current-string nil t 1)
-          (forward-char (- (length current-string)))
-          (forward-char current-offset))))))
+      (let* ((start (point))
+	     (imports (haskell-sort-imports-collect-imports))
+	     (sorted (sort (cl-copy-list imports)
+			   (lambda (a b)
+			     (string< (haskell-sort-imports-normalize a)
+				      (haskell-sort-imports-normalize b))))))
+	(when (not (equal imports sorted))
+	  (delete-region start (point))
+	  (mapc (lambda (import) (insert import "\n")) sorted))
+	(goto-char start)
+	(when (search-forward current-string nil t 1)
+	  (forward-char (- (length current-string)))
+	  (forward-char current-offset))))))
 
 (defun haskell-sort-imports-normalize (i)
   "Normalize an import, if possible, so that it can be sorted."
@@ -82,7 +85,7 @@ within that region."
         (goto-char (min (1+ (cdr points))
                         (point-max)))
         (setq imports (cons string imports))))
-    imports))
+    (reverse (delq nil (delete-dups imports)))))
 
 (defun haskell-sort-imports-goto-group-start ()
   "Go to the start of the import group."

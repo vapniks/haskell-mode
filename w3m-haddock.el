@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;;; w3m-haddock.el --- Make browsing haddocks with w3m-mode better.
 
 ;; Copyright (C) 2014 Chris Done
@@ -21,19 +22,23 @@
 ;; the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 ;; Boston, MA 02110-1301, USA.
 
-(require 'cl)
+(require 'cl-lib)
+(require 'haskell-mode)
+(require 'haskell-font-lock)
+
 (declare-function w3m-buffer-title "w3m")
 (declare-function w3m-browse-url "w3m")
 (defvar w3m-current-url)
 
-
 (add-hook 'w3m-display-hook 'w3m-haddock-display)
 
+;;;###autoload
 (defface w3m-haddock-heading-face
-  '((((class color)) :background "#eeeeee"))
+  '((((class color)) :inherit highlight))
   "Face for quarantines."
-  :group 'shm)
+  :group 'haskell)
 
+;;;###autoload
 (defcustom haskell-w3m-haddock-dirs
   '("~/.cabal/share/doc/")
   "The path to your cabal documentation dir. It should contain
@@ -45,7 +50,7 @@ You can rebind this if you're using hsenv by adding it to your
     ((haskell-mode . ((haskell-w3m-haddock-dirs . (\"/home/chris/Projects/foobar/.hsenv/cabal/share/doc\")))))
 
 "
-  :group 'shm
+  :group 'haskell
   :type 'list)
 
 (defvar w3m-haddock-entry-regex "^\\(\\(data\\|type\\) \\|[a-z].* :: \\)"
@@ -54,22 +59,25 @@ You can rebind this if you're using hsenv by adding it to your
 (defun haskell-w3m-open-haddock ()
   "Open a haddock page in w3m."
   (interactive)
-  (let* ((entries (remove-if (lambda (s) (string= s ""))
-                             (apply 'append (mapcar (lambda (dir)
-                                                      (split-string (shell-command-to-string (concat "ls -1 " dir))
+  (let* ((entries (cl-remove-if (lambda (s) (string= s ""))
+                                (apply 'append (mapcar (lambda (dir)
+                                                         (split-string (shell-command-to-string (concat "ls -1 " dir))
 
-                                                                    "\n"))
-                                                    haskell-w3m-haddock-dirs))))
+                                                                       "\n"))
+                                                       haskell-w3m-haddock-dirs))))
          (package-dir (ido-completing-read
                        "Package: "
                        entries)))
     (cond
      ((member package-dir entries)
-      (loop for dir in haskell-w3m-haddock-dirs
-            when (w3m-haddock-find-index dir package-dir)
-            do (progn (w3m-browse-url (w3m-haddock-find-index dir package-dir)
-                                      t)
-                      (return))))
+      (unless (cl-loop for dir in haskell-w3m-haddock-dirs
+                       when (w3m-haddock-find-index dir package-dir)
+                       do (progn (w3m-browse-url (w3m-haddock-find-index dir package-dir)
+                                                 t)
+                                 (cl-return t)))
+        (w3m-browse-url (concat "http://hackage.haskell.org/package/"
+                                package-dir)
+                        t)))
      (t
       (w3m-browse-url (concat "http://hackage.haskell.org/package/"
                               package-dir)
@@ -115,7 +123,7 @@ You can rebind this if you're using hsenv by adding it to your
          (replace-regexp-in-string "docs/.*" "docs/doc-index-All.html" w3m-current-url))
         (search-forward ident)))))
 
-(defun w3m-haddock-display (url)
+(defun w3m-haddock-display (_url)
   "To be ran by w3m's display hook. This takes a normal w3m
   buffer containing hadddock documentation and reformats it to be
   more usable and look like a dedicated documentation page."
